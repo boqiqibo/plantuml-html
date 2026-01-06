@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PlantUML 在线生成工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            padding: 2rem;
+            font-family: "Microsoft YaHei", sans-serif;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+
+        .input-area {
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+
+        label {
+            font-size: 1.1rem;
+            color: #555;
+            font-weight: 500;
+        }
+
+        textarea {
+            width: 100%;
+            height: 200px;
+            padding: 1rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            resize: vertical;
+            font-family: Consolas, monospace;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        button {
+            align-self: flex-start;
+            padding: 0.8rem 2rem;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #1976D2;
+        }
+
+        .result-area {
+            margin-top: 1rem;
+            padding: 1.5rem;
+            background-color: white;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            min-height: 200px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #umlImage {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            display: none;
+            /* 初始隐藏，生成后显示 */
+        }
+
+        .error-tip {
+            color: #f44336;
+            font-size: 1rem;
+            display: none;
+            /* 初始隐藏，错误时显示 */
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>PlantUML 本地服务调用工具</h1>
+
+        <div class="input-area">
+            <label for="umlScript">输入 PlantUML 脚本：</label>
+            <textarea id="umlScript" placeholder="示例：
+@startuml
+Alice -> Bob: Hello
+@enduml">@startuml
+Alice -> Bob: Hello
+@enduml</textarea>
+            <button onclick="generateUmlImage()">生成 UML 图片</button>
+        </div>
+
+        <div class="result-area" id="resultContainer">
+            <img id="umlImage" alt="生成的 UML 图片">
+            <p class="error-tip" id="errorTip">生成失败，请检查 PlantUML 服务是否正常运行</p>
+        </div>
+    </div>
+
+    <script>
+        // 核心方法：生成 UML 图片
+        function generateUmlImage() {
+            // 1. 获取页面元素和 UML 脚本
+            const umlScript = document.getElementById('umlScript').value.trim();
+            const umlImage = document.getElementById('umlImage');
+            const errorTip = document.getElementById('errorTip');
+            const resultContainer = document.getElementById('resultContainer');
+
+            // 2. 前置校验：脚本不能为空
+            if (!umlScript) {
+                alert('请输入有效的 PlantUML 脚本');
+                return;
+            }
+
+            // 3. 重置结果区域状态
+            umlImage.style.display = 'none';
+            errorTip.style.display = 'none';
+            resultContainer.style.backgroundColor = 'white';
+
+            try {
+                // 4. 对 UML 脚本进行编码（符合 PlantUML 服务要求）
+                // 步骤：先转 Base64，再进行 URL 安全编码（替换特殊字符）
+                const encodedScript = encodePlantUmlScript(umlScript);
+
+                // 5. 构造 PlantUML 服务请求 URL（对应你的本地服务地址和 png 格式）
+                const plantUmlUrl = `http://127.0.0.1:8000/plantuml/png/${encodedScript}`;
+
+                // 6. 绑定图片地址，监听加载状态
+                umlImage.src = plantUmlUrl;
+
+                // 图片加载成功
+                umlImage.onload = function () {
+                    umlImage.style.display = 'block';
+                    resultContainer.style.backgroundColor = '#f9f9f9';
+                };
+
+                // 图片加载失败（服务未启动/脚本错误等）
+                umlImage.onerror = function () {
+                    errorTip.style.display = 'block';
+                    console.error('UML 图片生成失败，请求 URL：', plantUmlUrl);
+                };
+
+            } catch (error) {
+                // 异常捕获
+                console.error('生成 UML 过程出现异常：', error);
+                errorTip.style.display = 'block';
+            }
+        }
+
+        // PlantUML 编码实现
+        function encodePlantUmlScript(script) {
+            // 1. UTF-8 编码
+            const utf8Bytes = encodeUTF8(script);
+
+            // 2. Deflate 压缩
+            const compressed = deflate(utf8Bytes);
+
+            // 3. Base64 变体编码
+            const encoded = encode64(compressed);
+
+            return encoded;
+        }
+
+        // UTF-8 编码
+        function encodeUTF8(str) {
+            const bytes = [];
+            for (let i = 0; i < str.length; i++) {
+                let code = str.charCodeAt(i);
+                if (code < 0x80) {
+                    bytes.push(code);
+                } else if (code < 0x800) {
+                    bytes.push(0xc0 | (code >> 6));
+                    bytes.push(0x80 | (code & 0x3f));
+                } else if (code < 0x10000) {
+                    bytes.push(0xe0 | (code >> 12));
+                    bytes.push(0x80 | ((code >> 6) & 0x3f));
+                    bytes.push(0x80 | (code & 0x3f));
+                } else {
+                    bytes.push(0xf0 | (code >> 18));
+                    bytes.push(0x80 | ((code >> 12) & 0x3f));
+                    bytes.push(0x80 | ((code >> 6) & 0x3f));
+                    bytes.push(0x80 | (code & 0x3f));
+                }
+            }
+            return new Uint8Array(bytes);
+        }
+
+        // 简化的 Deflate 压缩（使用浏览器内置 API）
+        function deflate(data) {
+            // 使用 pako 的简化实现
+            return deflateRaw(data);
+        }
+
+        // Raw Deflate 实现（简化版）
+        function deflateRaw(input) {
+            // 创建输出缓冲区
+            const output = [];
+
+            // DEFLATE 块头：非压缩块
+            let pos = 0;
+            while (pos < input.length) {
+                const blockSize = Math.min(65535, input.length - pos);
+                const isLastBlock = (pos + blockSize >= input.length) ? 1 : 0;
+
+                // 块头
+                output.push(isLastBlock);
+                output.push(blockSize & 0xff);
+                output.push((blockSize >> 8) & 0xff);
+                output.push((~blockSize) & 0xff);
+                output.push(((~blockSize) >> 8) & 0xff);
+
+                // 数据
+                for (let i = 0; i < blockSize; i++) {
+                    output.push(input[pos + i]);
+                }
+
+                pos += blockSize;
+            }
+
+            return new Uint8Array(output);
+        }
+
+        // PlantUML 特殊的 Base64 编码
+        function encode64(data) {
+            const base64Chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_';
+            let result = '';
+
+            for (let i = 0; i < data.length; i += 3) {
+                const b1 = data[i];
+                const b2 = i + 1 < data.length ? data[i + 1] : 0;
+                const b3 = i + 2 < data.length ? data[i + 2] : 0;
+
+                const c1 = b1 >> 2;
+                const c2 = ((b1 & 0x3) << 4) | (b2 >> 4);
+                const c3 = ((b2 & 0xf) << 2) | (b3 >> 6);
+                const c4 = b3 & 0x3f;
+
+                result += base64Chars.charAt(c1);
+                result += base64Chars.charAt(c2);
+
+                if (i + 1 < data.length) {
+                    result += base64Chars.charAt(c3);
+                }
+                if (i + 2 < data.length) {
+                    result += base64Chars.charAt(c4);
+                }
+            }
+
+            return result;
+        }
+    </script>
+</body>
+
+</html>
